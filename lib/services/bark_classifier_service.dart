@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -224,8 +225,8 @@ class BarkClassifierService {
     // Estimer le pitch avec autocorrélation simplifiée
     final pitch = _estimatePitch(samples);
     
-    // Estimer la durée en secondes (44100 Hz, 16-bit)
-    final duration = (audioBytes.length / 2 / 44100).clamp(0.1, 5.0);
+    // Estimer la durée en secondes (16000 Hz pour WAV YAMNet, 16-bit)
+    final duration = (audioBytes.length / 2 / 16000).clamp(0.1, 5.0);
     
     // Estimer la répétition (régularité des pics)
     final repetition = _estimateRepetition(samples);
@@ -390,11 +391,61 @@ class BarkClassifierService {
       if (!await file.exists()) return;
       
       final content = await file.readAsString();
-      // Parse simplifié - dans une version production, utiliser json.decode
-      // Pour l'instant, on garde juste le modèle de base
+      if (content.isEmpty) return;
+      
+      // Parse le JSON manuellement
+      // Format: {"faim":[{"p":350,"d":0.3,"i":0.6,"r":0.8,"h":0.5},...], ...}
+      final Map<String, dynamic> parsed = _parseJson(content);
+      
+      for (final entry in parsed.entries) {
+        final emotionName = entry.key;
+        final emotion = BarkEmotion.values.firstWhere(
+          (e) => e.name == emotionName,
+          orElse: () => BarkEmotion.inconnu,
+        );
+        
+        if (emotion == BarkEmotion.inconnu) continue;
+        
+        final List<dynamic> featuresList = entry.value as List<dynamic>;
+        final features = featuresList.map((f) {
+          final map = f as Map<String, dynamic>;
+          return AudioFeatures(
+            pitch: (map['p'] as num).toDouble(),
+            duration: (map['d'] as num).toDouble(),
+            intensity: (map['i'] as num).toDouble(),
+            repetition: (map['r'] as num).toDouble(),
+            harmonicity: (map['h'] as num).toDouble(),
+          );
+        }).toList();
+        
+        // Limiter à 50 samples par émotion pour les perfs
+        if (features.length > 50) {
+          _trainingData[emotion] = features.sublist(features.length - 50);
+        } else {
+          _trainingData[emotion] = features;
+        }
+      }
+      
+      print('Training data chargé: ${_trainingData.length} émotions');
     } catch (e) {
       print('Erreur chargement training data: $e');
     }
+  }
+  
+  /// Parse JSON simplifié (évite d'importer dart:convert partout)
+  Map<String, dynamic> _parseJson(String json) {
+    try {
+      // Utiliser dart:convert pour parser
+      final decoded = _decodeJson(json);
+      return decoded is Map<String, dynamic> ? decoded : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  
+  dynamic _decodeJson(String source) {
+    // Import implicite via le runtime Dart
+    return const JsonDecoder().convert(source);
   }
 
   /// Retourne le nombre d'échantillons par émotion
