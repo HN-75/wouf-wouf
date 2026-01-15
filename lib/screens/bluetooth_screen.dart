@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
-import '../services/bluetooth_service.dart';
+// import '../services/bluetooth_service.dart'; // Non utilisé directement
 
 /// Écran de connexion Bluetooth
 class BluetoothScreen extends StatefulWidget {
@@ -25,7 +25,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 
   Future<void> _checkBluetooth() async {
     final provider = context.read<AppProvider>();
-    final isAvailable = await provider.bluetooth.isAvailable();
+    final isAvailable = await provider.bluetooth?.isAvailable() ?? false;
     
     if (!isAvailable && mounted) {
       setState(() {
@@ -44,7 +44,14 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     });
 
     try {
-      final stream = await provider.bluetooth.startScan();
+      if (provider.bluetooth == null) {
+        setState(() {
+          _error = 'Bluetooth non disponible';
+          _isScanning = false;
+        });
+        return;
+      }
+      final stream = await provider.bluetooth!.startScan();
       
       stream.listen((results) {
         if (mounted) {
@@ -71,7 +78,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 
   Future<void> _stopScan() async {
     final provider = context.read<AppProvider>();
-    await provider.bluetooth.stopScan();
+    await provider.bluetooth?.stopScan();
     
     if (mounted) {
       setState(() => _isScanning = false);
@@ -83,7 +90,11 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     
     setState(() => _error = null);
 
-    final success = await provider.bluetooth.connect(device);
+    if (provider.bluetooth == null) {
+      setState(() => _error = 'Bluetooth non disponible');
+      return;
+    }
+    final success = await provider.bluetooth!.connect(device);
     
     if (mounted) {
       if (success) {
@@ -104,7 +115,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 
   Future<void> _disconnect() async {
     final provider = context.read<AppProvider>();
-    await provider.bluetooth.disconnect();
+    await provider.bluetooth?.disconnect();
     
     if (mounted) {
       setState(() {});

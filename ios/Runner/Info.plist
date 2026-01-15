@@ -43,7 +43,13 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
+		<key>UIApplicationSupportsIndirectInputEvents</key>
+		<true/>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>L'application Wouf Wouf a besoin d'accéder à votre microphone pour enregistrer les aboiements de votre chien et les traduire.</string>
+		<key>NSBluetoothAlwaysUsageDescription</key>
+		<string>L'application Wouf Wouf utilise le Bluetooth pour se connecter à des microphones externes ou des colliers intelligents pour une meilleure qualité d'enregistrement.</string>
+		<key>NSBluetoothPeripheralUsageDescription</key>
+		<string>L'application Wouf Wouf utilise le Bluetooth pour se connecter à des microphones externes ou des colliers intelligents pour une meilleure qualité d'enregistrement.</string>
 </dict>
 </plist>

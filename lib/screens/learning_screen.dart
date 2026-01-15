@@ -22,7 +22,7 @@ class _LearningScreenState extends State<LearningScreen> {
   void initState() {
     super.initState();
     final provider = context.read<AppProvider>();
-    provider.audioRecorder.amplitudeStream.listen((level) {
+    provider.audioRecorder?.amplitudeStream.listen((level) {
       if (mounted) {
         setState(() => _audioLevel = level);
       }
@@ -31,7 +31,15 @@ class _LearningScreenState extends State<LearningScreen> {
 
   Future<void> _startRecording() async {
     final provider = context.read<AppProvider>();
-    final hasPermission = await provider.audioRecorder.hasPermission();
+    if (provider.audioRecorder == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enregistreur non disponible')),
+        );
+      }
+      return;
+    }
+    final hasPermission = await provider.audioRecorder!.hasPermission();
     
     if (!hasPermission) {
       if (mounted) {
@@ -48,12 +56,12 @@ class _LearningScreenState extends State<LearningScreen> {
       _selectedEmotion = null;
     });
 
-    await provider.audioRecorder.startRecording();
+    await provider.audioRecorder!.startRecording();
   }
 
   Future<void> _stopRecording() async {
     final provider = context.read<AppProvider>();
-    final path = await provider.audioRecorder.stopRecording();
+    final path = await provider.audioRecorder?.stopRecording();
 
     setState(() {
       _isRecording = false;
@@ -245,7 +253,7 @@ class _LearningScreenState extends State<LearningScreen> {
   Widget _buildTrainingStats() {
     return Consumer<AppProvider>(
       builder: (context, provider, _) {
-        final stats = provider.classifier.getTrainingStats();
+        final stats = provider.classifier?.getTrainingStats() ?? {};
         
         return Container(
           padding: const EdgeInsets.all(16),

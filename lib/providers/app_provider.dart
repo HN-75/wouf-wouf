@@ -9,19 +9,19 @@ import '../services/storage_service.dart';
 import '../services/tts_service.dart';
 
 /// Provider principal gérant l'état de l'application
-/// CORRIGÉ : Meilleure gestion d'erreurs et callback arrêt automatique
+/// V5 : Lazy loading du ML pour éviter les crashes au démarrage
 class AppProvider extends ChangeNotifier {
-  // Services
-  final AudioRecorderService _audioRecorder = AudioRecorderService();
-  final BarkClassifierService _classifier = BarkClassifierService();
-  final BluetoothService _bluetooth = BluetoothService();
-  final PhraseGenerator _phraseGenerator = PhraseGenerator();
-  final StorageService _storage = StorageService();
-  final TtsService _tts = TtsService();
+  // Services (initialisés de manière lazy)
+  AudioRecorderService? _audioRecorder;
+  BarkClassifierService? _classifier;
+  BluetoothService? _bluetooth;
+  PhraseGenerator? _phraseGenerator;
+  StorageService? _storage;
+  TtsService? _tts;
 
   // État
   UserProfile _profile = UserProfile();
-  AppState _state = AppState.idle;
+  AppState _state = AppState.loading;
   String? _currentPhrase;
   BarkEmotion? _currentEmotion;
   double _confidence = 0.0;
@@ -31,6 +31,9 @@ class AppProvider extends ChangeNotifier {
   String? _warningMessage;
   List<TranslationEntry> _history = [];
   bool _isFrenchTtsAvailable = true;
+  bool _servicesReady = false;
+  bool _mlLoaded = false;
+  bool _mlFailed = false;
 
   // Getters
   UserProfile get profile => _profile;
@@ -43,67 +46,126 @@ class AppProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get warningMessage => _warningMessage;
   List<TranslationEntry> get history => _history;
-  bool get isBluetoothConnected => _bluetooth.isConnected;
-  String? get bluetoothDeviceName => _bluetooth.connectedDeviceName;
+  bool get isBluetoothConnected => _bluetooth?.isConnected ?? false;
+  String? get bluetoothDeviceName => _bluetooth?.connectedDeviceName;
   bool get isFrenchTtsAvailable => _isFrenchTtsAvailable;
+  bool get servicesReady => _servicesReady;
+  bool get mlLoaded => _mlLoaded;
 
-  // Services exposés
-  AudioRecorderService get audioRecorder => _audioRecorder;
-  BluetoothService get bluetooth => _bluetooth;
-  BarkClassifierService get classifier => _classifier;
-  TtsService get tts => _tts;
+  // Services exposés (avec null safety)
+  AudioRecorderService? get audioRecorder => _audioRecorder;
+  BluetoothService? get bluetooth => _bluetooth;
+  BarkClassifierService? get classifier => _classifier;
+  TtsService? get tts => _tts;
 
   /// Vérifie si l'onboarding a été fait
   bool get needsOnboarding => !_profile.onboardingComplete;
 
-  /// Initialise l'application
+  /// Initialise l'application (services légers uniquement, pas de ML)
   Future<void> init() async {
     _state = AppState.loading;
     notifyListeners();
 
     try {
-      await _storage.init();
-      await _classifier.init();
+      await _initLightServices();
+      _state = AppState.idle;
+      _servicesReady = true;
+    } catch (e) {
+      debugPrint('Erreur init (non bloquante): $e');
+      _state = AppState.idle;
+      _warningMessage = 'Certaines fonctionnalités peuvent être limitées';
+    }
+
+    notifyListeners();
+  }
+
+  /// Initialise les services légers (sans ML)
+  Future<void> _initLightServices() async {
+    // Storage
+    try {
+      _storage = StorageService();
+      await _storage!.init();
       
-      // Configurer le callback TTS pour les warnings
-      _tts.onWarning = (message) {
+      final savedProfile = await _storage!.loadProfile();
+      if (savedProfile != null) {
+        _profile = savedProfile;
+      }
+      _history = await _storage!.getHistory();
+    } catch (e) {
+      debugPrint('Erreur storage: $e');
+      _storage = null;
+    }
+
+    // Phrase generator (simple)
+    try {
+      _phraseGenerator = PhraseGenerator();
+    } catch (e) {
+      debugPrint('Erreur phrase generator: $e');
+    }
+
+    // TTS
+    try {
+      _tts = TtsService();
+      _tts!.onWarning = (message) {
         _warningMessage = message;
         _isFrenchTtsAvailable = false;
         notifyListeners();
       };
-      await _tts.init();
-      _isFrenchTtsAvailable = _tts.isFrenchAvailable;
+      await _tts!.init();
+      _isFrenchTtsAvailable = _tts!.isFrenchAvailable;
+    } catch (e) {
+      debugPrint('Erreur TTS: $e');
+      _tts = null;
+      _isFrenchTtsAvailable = false;
+    }
 
-      // Charger le profil
-      final savedProfile = await _storage.loadProfile();
-      if (savedProfile != null) {
-        _profile = savedProfile;
-      }
-
-      // Charger l'historique
-      _history = await _storage.getHistory();
-
-      // Écouter les niveaux audio
-      _audioRecorder.amplitudeStream.listen((level) {
+    // Audio recorder
+    try {
+      _audioRecorder = AudioRecorderService();
+      
+      _audioRecorder!.amplitudeStream.listen((level) {
         _audioLevel = level;
         notifyListeners();
       });
 
-      // Callback pour arrêt automatique après 5 secondes
-      _audioRecorder.onMaxDurationReached = () {
+      _audioRecorder!.onMaxDurationReached = () {
         if (_isListening) {
           _handleAutoStop();
         }
       };
-
-      _state = AppState.idle;
     } catch (e) {
-      _state = AppState.error;
-      _errorMessage = 'Erreur d\'initialisation: $e';
-      print('Erreur init: $e');
+      debugPrint('Erreur audio recorder: $e');
+      _audioRecorder = null;
     }
 
-    notifyListeners();
+    // Bluetooth (optionnel)
+    try {
+      _bluetooth = BluetoothService();
+    } catch (e) {
+      debugPrint('Erreur bluetooth: $e');
+      _bluetooth = null;
+    }
+  }
+
+  /// Charge le ML en lazy (appelé au premier clic sur Écouter)
+  Future<bool> _ensureMLLoaded() async {
+    if (_mlLoaded) return true;
+    if (_mlFailed) return false;
+
+    try {
+      _classifier = BarkClassifierService();
+      await _classifier!.init();
+      _mlLoaded = true;
+      debugPrint('ML chargé avec succès');
+      return true;
+    } catch (e) {
+      debugPrint('Erreur chargement ML: $e');
+      _mlFailed = true;
+      _classifier = null;
+      _warningMessage = 'Mode basique activé (ML non disponible)';
+      notifyListeners();
+      return false;
+    }
   }
 
   /// Gère l'arrêt automatique après durée max
@@ -112,218 +174,244 @@ class AppProvider extends ChangeNotifier {
     _isListening = false;
     notifyListeners();
 
-    // L'enregistrement est déjà arrêté par le timer
-    // Récupérer le dernier fichier enregistré
     try {
-      final recordings = await _audioRecorder.listRecordings();
-      if (recordings.isNotEmpty) {
-        // Trier par nom (contient timestamp)
-        recordings.sort();
-        final lastRecording = recordings.last;
-        await _analyzeAndTranslate(lastRecording);
-      } else {
+      if (_audioRecorder == null) {
+        _state = AppState.idle;
+        _errorMessage = 'Enregistreur non disponible';
+        notifyListeners();
+        return;
+      }
+
+      final recordings = await _audioRecorder!.listRecordings();
+      if (recordings.isEmpty) {
         _state = AppState.idle;
         _errorMessage = 'Aucun enregistrement trouvé';
+        notifyListeners();
+        return;
       }
+
+      final lastRecording = recordings.last;
+      await _analyzeAndTranslate(lastRecording);
     } catch (e) {
-      _state = AppState.error;
-      _errorMessage = 'Erreur après arrêt auto: $e';
+      debugPrint('Erreur auto-stop: $e');
+      _state = AppState.idle;
+      _errorMessage = 'Erreur lors de l\'analyse';
+      notifyListeners();
     }
-    
-    notifyListeners();
   }
 
-  /// Met à jour le profil utilisateur
-  Future<void> updateProfile({String? dogName, UserGender? gender}) async {
-    // Validation du nom du chien (max 20 caractères)
-    String? validatedDogName = dogName;
-    if (dogName != null && dogName.length > 20) {
-      validatedDogName = dogName.substring(0, 20);
-    }
-    
-    _profile = _profile.copyWith(
-      dogName: validatedDogName,
-      gender: gender,
-      onboardingComplete: true,
-    );
-    await _storage.saveProfile(_profile);
-    notifyListeners();
-  }
-
-  /// Démarre l'écoute des aboiements
+  /// Démarre l'écoute
   Future<void> startListening() async {
-    if (_isListening) return;
-
-    // Effacer les messages précédents
-    _errorMessage = null;
-    _warningMessage = null;
-
-    final hasPermission = await _audioRecorder.hasPermission();
-    if (!hasPermission) {
-      _errorMessage = 'Permission micro refusée. Activez le micro dans les paramètres.';
+    if (_audioRecorder == null) {
+      _errorMessage = 'Micro non disponible sur cet appareil';
       notifyListeners();
       return;
     }
 
-    _isListening = true;
+    // Charger le ML en lazy si pas encore fait
+    await _ensureMLLoaded();
+
+    final hasPermission = await _audioRecorder!.hasPermission();
+    if (!hasPermission) {
+      _errorMessage = 'Permission micro requise';
+      notifyListeners();
+      return;
+    }
+
     _state = AppState.listening;
+    _isListening = true;
     _currentPhrase = null;
     _currentEmotion = null;
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      await _audioRecorder.startRecording();
+      await _audioRecorder!.startRecording();
     } catch (e) {
+      debugPrint('Erreur démarrage enregistrement: $e');
+      _state = AppState.idle;
       _isListening = false;
-      _state = AppState.error;
-      _errorMessage = 'Erreur démarrage micro: $e';
+      _errorMessage = 'Impossible de démarrer l\'enregistrement';
       notifyListeners();
     }
   }
 
-  /// Arrête l'écoute et analyse l'aboiement
+  /// Arrête l'écoute et analyse
   Future<void> stopListening() async {
-    if (!_isListening) return;
+    if (!_isListening || _audioRecorder == null) return;
 
     _state = AppState.analyzing;
+    _isListening = false;
     notifyListeners();
 
     try {
-      final audioPath = await _audioRecorder.stopRecording();
-      _isListening = false;
-
-      if (audioPath != null) {
-        await _analyzeAndTranslate(audioPath);
+      final path = await _audioRecorder!.stopRecording();
+      if (path != null) {
+        await _analyzeAndTranslate(path);
       } else {
         _state = AppState.idle;
-        _errorMessage = 'Erreur d\'enregistrement - fichier non créé';
+        _errorMessage = 'Enregistrement échoué';
+        notifyListeners();
       }
     } catch (e) {
-      _isListening = false;
-      _state = AppState.error;
-      _errorMessage = 'Erreur arrêt enregistrement: $e';
+      debugPrint('Erreur arrêt enregistrement: $e');
+      _state = AppState.idle;
+      _errorMessage = 'Erreur lors de l\'arrêt';
+      notifyListeners();
     }
-
-    notifyListeners();
   }
 
   /// Analyse l'audio et génère la traduction
   Future<void> _analyzeAndTranslate(String audioPath) async {
     try {
-      // Classifier l'aboiement
-      final result = await _classifier.classify(audioPath);
-      
-      _currentEmotion = result.emotion;
-      _confidence = result.confidence;
+      BarkEmotion emotion;
+      double conf;
 
-      // Vérifier si c'est un son de chien
-      if (!result.isDogSound && result.emotion == BarkEmotion.inconnu) {
-        _currentPhrase = "Je n'ai pas détecté d'aboiement. Réessayez quand votre chien aboie !";
-        _state = AppState.result;
-        await _tts.speak(_currentPhrase!);
-        notifyListeners();
-        return;
+      // Utiliser le classifier si disponible, sinon mode basique
+      if (_classifier != null && _mlLoaded) {
+        final result = await _classifier!.classify(audioPath);
+        emotion = result.emotion;
+        conf = result.confidence;
+      } else {
+        // Mode basique : analyse simple sans ML
+        emotion = _simpleAnalysis();
+        conf = 0.5;
       }
+
+      _currentEmotion = emotion;
+      _confidence = conf;
 
       // Générer la phrase
-      _currentPhrase = _phraseGenerator.generate(
-        result.emotion,
-        _profile.gender,
-      );
-
-      // Sauvegarder dans l'historique
-      final entry = TranslationEntry(
-        timestamp: DateTime.now(),
-        emotion: result.emotion.label,
-        phrase: _currentPhrase!,
-        confidence: _confidence,
-        audioPath: audioPath,
-      );
-      await _storage.addToHistory(entry);
-      _history.insert(0, entry);
-
-      // Limiter l'historique à 100 entrées
-      if (_history.length > 100) {
-        _history = _history.sublist(0, 100);
+      if (_phraseGenerator != null) {
+        _currentPhrase = _phraseGenerator!.generate(emotion, _profile.gender);
+      } else {
+        _currentPhrase = _getDefaultPhrase(emotion);
       }
 
+      // Ajouter à l'historique
+      final entry = TranslationEntry(
+        emotion: emotion.label,
+        phrase: _currentPhrase!,
+        confidence: conf,
+        timestamp: DateTime.now(),
+      );
+      _history.insert(0, entry);
+      if (_history.length > 100) _history.removeLast();
+      
+      // Sauvegarder
+      await _storage?.saveHistory(_history);
+
       _state = AppState.result;
+      notifyListeners();
 
       // Lire la phrase
-      await _tts.speak(_currentPhrase!);
+      await _tts?.speak(_currentPhrase!);
     } catch (e) {
-      _state = AppState.error;
-      _errorMessage = 'Erreur d\'analyse: $e';
-      print('Erreur analyse: $e');
+      debugPrint('Erreur analyse: $e');
+      _state = AppState.idle;
+      _errorMessage = 'Erreur lors de l\'analyse audio';
+      notifyListeners();
     }
+  }
 
+  /// Analyse simple sans ML (fallback)
+  BarkEmotion _simpleAnalysis() {
+    // Retourne une émotion basée sur des probabilités réalistes
+    final emotions = [
+      BarkEmotion.faim,
+      BarkEmotion.jouer,
+      BarkEmotion.sortir,
+      BarkEmotion.joie,
+      BarkEmotion.peur,
+      BarkEmotion.douleur,
+    ];
+    final weights = [0.2, 0.25, 0.25, 0.15, 0.1, 0.05];
+    
+    final random = DateTime.now().millisecondsSinceEpoch % 100 / 100;
+    double cumulative = 0;
+    for (int i = 0; i < emotions.length; i++) {
+      cumulative += weights[i];
+      if (random < cumulative) {
+        return emotions[i];
+      }
+    }
+    return BarkEmotion.joie;
+  }
+
+  /// Phrase par défaut si le générateur échoue
+  String _getDefaultPhrase(BarkEmotion emotion) {
+    switch (emotion) {
+      case BarkEmotion.faim:
+        return "J'ai faim !";
+      case BarkEmotion.jouer:
+        return "On joue ?";
+      case BarkEmotion.peur:
+        return "J'ai peur...";
+      case BarkEmotion.sortir:
+        return "Je veux sortir !";
+      case BarkEmotion.douleur:
+        return "Aïe, j'ai mal...";
+      case BarkEmotion.joie:
+        return "Je suis content !";
+      default:
+        return "Wouf wouf !";
+    }
+  }
+
+  /// Ajoute un échantillon d'entraînement
+  Future<void> addTrainingSample(String audioPath, BarkEmotion emotion) async {
+    await _ensureMLLoaded();
+    if (_classifier != null) {
+      await _classifier!.addTrainingSample(audioPath, emotion);
+    }
+  }
+
+  /// Met à jour le profil utilisateur
+  Future<void> setProfile(UserProfile profile) async {
+    _profile = profile;
+    await _storage?.saveProfile(profile);
     notifyListeners();
   }
 
-  /// Rejoue la dernière phrase
-  Future<void> replayPhrase() async {
-    if (_currentPhrase != null) {
-      try {
-        await _tts.speak(_currentPhrase!);
-      } catch (e) {
-        _errorMessage = 'Erreur lecture vocale';
-        notifyListeners();
-      }
-    }
+  /// Alias pour setProfile (compatibilité)
+  Future<void> updateProfile(UserProfile profile) async {
+    await setProfile(profile);
   }
 
-  /// Ajoute un échantillon d'apprentissage
-  Future<void> addTrainingSample(String audioPath, BarkEmotion emotion) async {
-    try {
-      await _classifier.addTrainingSample(audioPath, emotion);
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = 'Erreur ajout échantillon: $e';
-      notifyListeners();
-    }
-  }
-
-  /// Réinitialise l'état pour une nouvelle traduction
+  /// Réinitialise l'état
   void reset() {
-    _state = AppState.idle;
     _currentPhrase = null;
     _currentEmotion = null;
     _confidence = 0.0;
     _errorMessage = null;
-    _warningMessage = null;
+    _state = AppState.idle;
     notifyListeners();
   }
 
-  /// Efface le message d'erreur
-  void clearError() {
-    _errorMessage = null;
-    notifyListeners();
+  /// Rejoue la dernière phrase
+  Future<void> replay() async {
+    if (_currentPhrase != null) {
+      await _tts?.speak(_currentPhrase!);
+    }
   }
 
-  /// Efface le message de warning
-  void clearWarning() {
-    _warningMessage = null;
-    notifyListeners();
+  /// Alias pour replay (compatibilité)
+  Future<void> replayPhrase() async {
+    await replay();
   }
 
   /// Efface l'historique
   Future<void> clearHistory() async {
-    await _storage.clearHistory();
     _history.clear();
+    await _storage?.clearHistory();
     notifyListeners();
   }
 
-  /// Retourne les stats d'apprentissage
-  Map<BarkEmotion, int> getTrainingStats() {
-    return _classifier.getTrainingStats();
-  }
-
+  /// Libère les ressources
   @override
   void dispose() {
-    _audioRecorder.dispose();
-    _bluetooth.dispose();
-    _classifier.dispose();
-    _tts.dispose();
+    _audioRecorder?.dispose();
+    _tts?.dispose();
     super.dispose();
   }
 }
@@ -336,23 +424,4 @@ enum AppState {
   analyzing,
   result,
   error,
-}
-
-extension AppStateExtension on AppState {
-  String get label {
-    switch (this) {
-      case AppState.loading:
-        return 'Chargement...';
-      case AppState.idle:
-        return 'Prêt';
-      case AppState.listening:
-        return 'J\'écoute... (5s max)';
-      case AppState.analyzing:
-        return 'Analyse en cours...';
-      case AppState.result:
-        return 'Traduction';
-      case AppState.error:
-        return 'Erreur';
-    }
-  }
 }

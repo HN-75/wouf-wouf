@@ -36,10 +36,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _complete() async {
     final provider = context.read<AppProvider>();
-    await provider.updateProfile(
+    final newProfile = provider.profile.copyWith(
       dogName: _dogNameController.text.isEmpty ? null : _dogNameController.text,
       gender: _selectedGender,
+      onboardingComplete: true,
     );
+    await provider.updateProfile(newProfile);
 
     if (mounted) {
       Navigator.of(context).pushReplacement(

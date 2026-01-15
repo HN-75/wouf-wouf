@@ -279,7 +279,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              provider.updateProfile(dogName: controller.text);
+              provider.updateProfile(provider.profile.copyWith(dogName: controller.text));
               Navigator.pop(context);
             },
             child: const Text('Enregistrer'),
@@ -305,13 +305,13 @@ class SettingsScreen extends StatelessWidget {
                 groupValue: provider.profile.gender,
                 onChanged: (value) {
                   if (value != null) {
-                    provider.updateProfile(gender: value);
+                    provider.updateProfile(provider.profile.copyWith(gender: value));
                     Navigator.pop(context);
                   }
                 },
               ),
               onTap: () {
-                provider.updateProfile(gender: gender);
+                provider.updateProfile(provider.profile.copyWith(gender: gender));
                 Navigator.pop(context);
               },
             );

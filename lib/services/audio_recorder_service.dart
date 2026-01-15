@@ -31,10 +31,17 @@ class AudioRecorderService {
 
   /// Démarre l'enregistrement en WAV PCM 16kHz mono
   Future<String?> startRecording() async {
-    if (_isRecording) return null;
+    if (_isRecording) {
+      print("DEBUG: Tentative de démarrage alors que l'enregistrement est déjà en cours.");
+      return null;
+    }
 
     final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) return null;
+    print("DEBUG: Permission micro vérifiée: $hasPermission");
+    if (!hasPermission) {
+      print("ERREUR: Permission micro refusée. Impossible de démarrer l'enregistrement.");
+      return null;
+    }
 
     final directory = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -74,9 +81,10 @@ class AudioRecorderService {
         }
       });
 
+      print("DEBUG: Enregistrement démarré avec succès. Chemin: $_currentPath");
       return _currentPath;
     } catch (e) {
-      print('Erreur démarrage enregistrement: $e');
+      print("ERREUR CRITIQUE: Échec du démarrage de l'enregistrement: $e");
       return null;
     }
   }
