@@ -39,57 +39,57 @@ class BarkClassifierService {
   /// - Pongrácz et al. (2005) : Classification of dog barks
   /// - Molnár et al. (2008) : Classification of dog barks by acoustic parameters
   void _initializeBaseModel() {
-    // FAIM : aboiements répétitifs, fréquence moyenne, durée courte, tonalité montante
+    // FAIM : aboiements répétitifs, fréquence moyenne (300-400Hz), durée courte, tonalité montante
     // Les chiens affamés produisent des aboiements insistants et réguliers
     _trainingData[BarkEmotion.faim] = [
-      AudioFeatures(pitch: 350, duration: 0.3, intensity: 0.6, repetition: 0.8, harmonicity: 0.5),
-      AudioFeatures(pitch: 380, duration: 0.25, intensity: 0.65, repetition: 0.85, harmonicity: 0.55),
-      AudioFeatures(pitch: 320, duration: 0.35, intensity: 0.55, repetition: 0.75, harmonicity: 0.45),
-      AudioFeatures(pitch: 360, duration: 0.28, intensity: 0.62, repetition: 0.82, harmonicity: 0.52),
+      AudioFeatures(pitch: 320, duration: 0.35, intensity: 0.55, repetition: 0.80, harmonicity: 0.45),
+      AudioFeatures(pitch: 350, duration: 0.30, intensity: 0.60, repetition: 0.85, harmonicity: 0.50),
+      AudioFeatures(pitch: 380, duration: 0.25, intensity: 0.65, repetition: 0.80, harmonicity: 0.55),
+      AudioFeatures(pitch: 340, duration: 0.32, intensity: 0.58, repetition: 0.82, harmonicity: 0.48),
     ];
     
-    // JOUER : aboiements aigus, courts, très répétitifs, haute énergie, tonalité variable
+    // JOUER : aboiements aigus (400-500Hz), courts, très répétitifs, haute énergie, tonalité variable
     // Les aboiements de jeu sont caractérisés par leur variabilité et leur énergie
     _trainingData[BarkEmotion.jouer] = [
-      AudioFeatures(pitch: 450, duration: 0.2, intensity: 0.8, repetition: 0.9, harmonicity: 0.7),
-      AudioFeatures(pitch: 480, duration: 0.15, intensity: 0.85, repetition: 0.95, harmonicity: 0.75),
       AudioFeatures(pitch: 420, duration: 0.25, intensity: 0.75, repetition: 0.85, harmonicity: 0.65),
+      AudioFeatures(pitch: 450, duration: 0.20, intensity: 0.80, repetition: 0.90, harmonicity: 0.70),
+      AudioFeatures(pitch: 480, duration: 0.15, intensity: 0.85, repetition: 0.95, harmonicity: 0.75),
       AudioFeatures(pitch: 460, duration: 0.18, intensity: 0.82, repetition: 0.92, harmonicity: 0.72),
     ];
     
-    // PEUR : aboiements graves, longs, gémissements, basse fréquence, tonalité descendante
+    // PEUR : aboiements graves (150-250Hz), longs, gémissements, basse fréquence, tonalité descendante
     // La peur produit des sons plus graves et prolongés
     _trainingData[BarkEmotion.peur] = [
-      AudioFeatures(pitch: 200, duration: 0.8, intensity: 0.4, repetition: 0.3, harmonicity: 0.3),
-      AudioFeatures(pitch: 180, duration: 1.0, intensity: 0.35, repetition: 0.25, harmonicity: 0.25),
-      AudioFeatures(pitch: 220, duration: 0.7, intensity: 0.45, repetition: 0.35, harmonicity: 0.35),
-      AudioFeatures(pitch: 190, duration: 0.9, intensity: 0.38, repetition: 0.28, harmonicity: 0.28),
+      AudioFeatures(pitch: 180, duration: 1.00, intensity: 0.35, repetition: 0.25, harmonicity: 0.25),
+      AudioFeatures(pitch: 200, duration: 0.80, intensity: 0.40, repetition: 0.30, harmonicity: 0.30),
+      AudioFeatures(pitch: 220, duration: 0.70, intensity: 0.45, repetition: 0.35, harmonicity: 0.35),
+      AudioFeatures(pitch: 190, duration: 0.90, intensity: 0.38, repetition: 0.28, harmonicity: 0.28),
     ];
     
-    // SORTIR : aboiements insistants, fréquence moyenne-haute, durée moyenne
+    // SORTIR : aboiements insistants, fréquence moyenne-haute (360-410Hz), durée moyenne
     // Demande d'attention avec une certaine urgence
     _trainingData[BarkEmotion.sortir] = [
-      AudioFeatures(pitch: 380, duration: 0.4, intensity: 0.7, repetition: 0.7, harmonicity: 0.55),
-      AudioFeatures(pitch: 400, duration: 0.35, intensity: 0.75, repetition: 0.75, harmonicity: 0.6),
-      AudioFeatures(pitch: 360, duration: 0.45, intensity: 0.65, repetition: 0.65, harmonicity: 0.5),
+      AudioFeatures(pitch: 360, duration: 0.45, intensity: 0.65, repetition: 0.65, harmonicity: 0.50),
+      AudioFeatures(pitch: 380, duration: 0.40, intensity: 0.70, repetition: 0.70, harmonicity: 0.55),
+      AudioFeatures(pitch: 400, duration: 0.35, intensity: 0.75, repetition: 0.75, harmonicity: 0.60),
       AudioFeatures(pitch: 390, duration: 0.38, intensity: 0.72, repetition: 0.72, harmonicity: 0.57),
     ];
     
-    // DOULEUR : gémissements, sons aigus et plaintifs, longue durée, haute harmonicité
+    // DOULEUR : gémissements, sons aigus et plaintifs (480-530Hz), longue durée, haute harmonicité
     // Les vocalisations de douleur sont distinctives par leur tonalité plaintive
     _trainingData[BarkEmotion.douleur] = [
-      AudioFeatures(pitch: 500, duration: 1.2, intensity: 0.5, repetition: 0.2, harmonicity: 0.8),
-      AudioFeatures(pitch: 520, duration: 1.5, intensity: 0.45, repetition: 0.15, harmonicity: 0.85),
-      AudioFeatures(pitch: 480, duration: 1.0, intensity: 0.55, repetition: 0.25, harmonicity: 0.75),
-      AudioFeatures(pitch: 510, duration: 1.3, intensity: 0.48, repetition: 0.18, harmonicity: 0.82),
+      AudioFeatures(pitch: 480, duration: 1.00, intensity: 0.55, repetition: 0.25, harmonicity: 0.75),
+      AudioFeatures(pitch: 500, duration: 1.20, intensity: 0.50, repetition: 0.20, harmonicity: 0.80),
+      AudioFeatures(pitch: 520, duration: 1.50, intensity: 0.45, repetition: 0.15, harmonicity: 0.85),
+      AudioFeatures(pitch: 510, duration: 1.30, intensity: 0.48, repetition: 0.18, harmonicity: 0.82),
     ];
     
-    // JOIE : aboiements courts, aigus, très énergiques, haute répétition
+    // JOIE : aboiements courts (0.1-0.2s), aigus (400-450Hz), très énergiques, haute répétition
     // L'excitation positive produit des sons rapides et énergiques
     _trainingData[BarkEmotion.joie] = [
-      AudioFeatures(pitch: 420, duration: 0.15, intensity: 0.9, repetition: 0.95, harmonicity: 0.65),
-      AudioFeatures(pitch: 450, duration: 0.1, intensity: 0.95, repetition: 1.0, harmonicity: 0.7),
-      AudioFeatures(pitch: 400, duration: 0.2, intensity: 0.85, repetition: 0.9, harmonicity: 0.6),
+      AudioFeatures(pitch: 400, duration: 0.20, intensity: 0.85, repetition: 0.90, harmonicity: 0.60),
+      AudioFeatures(pitch: 420, duration: 0.15, intensity: 0.90, repetition: 0.95, harmonicity: 0.65),
+      AudioFeatures(pitch: 450, duration: 0.10, intensity: 0.95, repetition: 1.00, harmonicity: 0.70),
       AudioFeatures(pitch: 430, duration: 0.12, intensity: 0.92, repetition: 0.97, harmonicity: 0.67),
     ];
   }
@@ -101,8 +101,10 @@ class BarkClassifierService {
     // Étape 1 : Vérifier avec YAMNet si c'est un son de chien
     final yamnetResult = await _yamnet.analyzeAudio(audioPath);
     
-    if (!yamnetResult.isDogSound && yamnetResult.dogConfidence < 0.2) {
+    // CORRECTION : Seuil augmenté de 0.2 à 0.6 pour filtrer la voix humaine
+    if (!yamnetResult.isDogSound && yamnetResult.dogConfidence < 0.6) {
       // Ce n'est probablement pas un son de chien
+      print('DEBUG: Son rejeté par YAMNet - Confiance: ${yamnetResult.dogConfidence}, Type: ${yamnetResult.topClass}');
       return ClassificationResult(
         emotion: BarkEmotion.inconnu,
         confidence: 0.0,
@@ -114,9 +116,11 @@ class BarkClassifierService {
     
     // Étape 2 : Extraire les caractéristiques audio
     final features = await _extractFeatures(audioPath);
+    print('DEBUG: Caractéristiques extraites - $features');
     
     // Étape 3 : Utiliser le type YAMNet pour affiner la classification
     BarkEmotion? yamnetHint = _getEmotionHintFromYamnet(yamnetResult.dogSoundType);
+    print('DEBUG: Indice YAMNet - $yamnetHint (type: ${yamnetResult.dogSoundType})');
     
     // Étape 4 : Trouver l'émotion la plus proche avec KNN
     BarkEmotion bestMatch = BarkEmotion.inconnu;
@@ -145,6 +149,9 @@ class BarkClassifierService {
     // Calculer la confiance (inverse de la distance, normalisé)
     // Plus la distance est faible, plus la confiance est haute
     final confidence = (1.0 / (1.0 + bestScore * 0.5)).clamp(0.3, 0.95);
+    
+    print('DEBUG: Classification - Émotion: ${bestMatch.label}, Confiance: ${(confidence * 100).toStringAsFixed(0)}%, Distance: ${bestScore.toStringAsFixed(2)}');
+    print('DEBUG: Tous les scores - $allScores');
     
     return ClassificationResult(
       emotion: bestMatch,
@@ -250,8 +257,9 @@ class BarkClassifierService {
     }
     
     // Chercher la période fondamentale par autocorrélation
-    const minLag = 20; // ~2200 Hz max
-    const maxLag = 400; // ~110 Hz min
+    // Pour 16000 Hz : lag 20 = 800Hz, lag 400 = 40Hz
+    const minLag = 20; // ~800 Hz max
+    const maxLag = 400; // ~40 Hz min
     
     double maxCorr = 0;
     int bestLag = 100;
@@ -270,8 +278,8 @@ class BarkClassifierService {
       }
     }
     
-    // Convertir le lag en fréquence (44100 Hz sample rate)
-    final pitch = 44100.0 / bestLag;
+    // Convertir le lag en fréquence (16000 Hz sample rate pour WAV YAMNet)
+    final pitch = 16000.0 / bestLag;
     
     return pitch;
   }
